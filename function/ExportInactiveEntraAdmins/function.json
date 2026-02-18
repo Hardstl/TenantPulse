@@ -4,7 +4,8 @@
       "name": "Timer",
       "type": "timerTrigger",
       "direction": "in",
-      "schedule": "%EXPORT_ENTRAROLES_SCHEDULE%"
+      "schedule": "%EXPORT_INACTIVEENTRAADMINS_SCHEDULE%"
     }
   ]
 }
+

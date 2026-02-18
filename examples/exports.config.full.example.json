@@ -11,18 +11,73 @@
     }
   },
   "exports": {
-    "ENTRAROLES": {
+    "ENTRAROLEMEMBERS": {
       "enabled": true,
       "formats": [
         "json",
         "csv",
         "html"
       ],
-      "blobPrefix": "roles",
+      "blobPrefix": "entra-role-members",
       "storage": {
         "storageAccount": "<export-storage-account>",
         "storageContainer": "exports"
       }
+    },
+    "ACCOUNTMATCH_ADM": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "account-match-adm",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "upnStartsWith": [
+        "adm.",
+        "admin."
+      ],
+      "upnContains": [],
+      "displayNameContains": [
+        "admin"
+      ],
+      "properties": [
+        "UserId",
+        "UserPrincipalName",
+        "DisplayName",
+        "Mail",
+        "UserType",
+        "AccountEnabled"
+      ]
+    },
+    "ACCOUNTMATCH_SVC": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "account-match-svc",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "upnStartsWith": [
+        "svc."
+      ],
+      "upnContains": [],
+      "displayNameContains": [],
+      "properties": [
+        "UserId",
+        "UserPrincipalName",
+        "DisplayName",
+        "Mail",
+        "UserType",
+        "AccountEnabled"
+      ]
     },
     "GROUPMEMBERS": {
       "enabled": true,
@@ -39,14 +94,14 @@
       "groupIds": [
         "33333333-3333-3333-3333-333333333333"
       ],
-      "additionalProperties": [
+      "properties": [
         "mail",
         "department",
         "jobTitle",
         "employeeId",
         "extensionAttribute2"
       ],
-      "excludeAdditionalPropertiesByGroup": {
+      "excludePropertiesByGroup": {
         "33333333-3333-3333-3333-333333333333": [
           "department"
         ]
@@ -67,11 +122,10 @@
       "administrativeUnitIds": [
         "44444444-4444-4444-4444-444444444444"
       ],
-      "additionalProperties": [
+      "properties": [
         "mail",
         "department"
-      ],
-      "excludeAdditionalPropertiesByGroup": {}
+      ]
     },
     "SUBSCRIPTIONS": {
       "enabled": true,
@@ -126,10 +180,9 @@
         "storageContainer": "exports"
       },
       "lowAvailableThreshold": 5,
-      "friendlyNamesSourceUrl": "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv",
-      "mappingCacheHours": 24
+      "friendlyNamesSourceUrl": "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv"
     },
-    "INACTIVEADMINS": {
+    "INACTIVEENTRAADMINS": {
       "enabled": true,
       "formats": [
         "json",
@@ -145,3 +198,6 @@
     }
   }
 }
+
+
+

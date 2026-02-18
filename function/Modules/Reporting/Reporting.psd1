@@ -8,13 +8,16 @@
     PowerShellVersion = '7.4'
     FunctionsToExport = @(
         'Invoke-Export',
+        'Get-ConfiguredExportNamesByPrefix',
         'Get-RoleAssignmentsExport',
+        'Get-AccountMatchesExport',
         'Get-GroupMembersExport',
         'Get-AuGroupMembersExport',
         'Get-SubscriptionsExport',
         'Get-AppRegistrationsExport',
         'Get-GraphPermissionsExport',
         'Get-LicenseExport',
-        'Get-InactiveAdminAccountsExport'
+        'Get-InactiveEntraAdminAccountsExport'
     )
 }
+

@@ -1,0 +1,38 @@
+{
+  "defaults": {
+    "formats": ["json", "csv", "html"],
+    "storage": {
+      "storageAccount": "<export-storage-account>",
+      "storageContainer": "exports"
+    }
+  },
+  "exports": {
+    "ACCOUNTMATCH_ADM": {
+      "enabled": true,
+      "formats": ["json", "csv", "html"],
+      "blobPrefix": "account-match-adm",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "upnStartsWith": ["adm.", "admin."],
+      "upnContains": [],
+      "displayNameContains": ["admin"],
+      "properties": ["UserId", "UserPrincipalName", "DisplayName", "Mail", "UserType", "AccountEnabled"]
+    },
+    "ACCOUNTMATCH_SVC": {
+      "enabled": true,
+      "formats": ["json", "csv", "html"],
+      "blobPrefix": "account-match-svc",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "upnStartsWith": ["svc."],
+      "upnContains": [],
+      "displayNameContains": [],
+      "properties": ["UserId", "UserPrincipalName", "DisplayName", "Mail", "UserType", "AccountEnabled"]
+    }
+  }
+}
+

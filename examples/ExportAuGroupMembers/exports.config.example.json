@@ -17,10 +17,10 @@
       "administrativeUnitIds": [
         "44444444-4444-4444-4444-444444444444"
       ],
-      "additionalProperties": [
+      "properties": [
         "department"
-      ],
-      "excludeAdditionalPropertiesByGroup": {}
+      ]
     }
   }
 }
+

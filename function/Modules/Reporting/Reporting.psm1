@@ -342,6 +342,27 @@ function Get-ExportConfig {
     return $exportConfig
 }
 
+function Get-ConfiguredExportNamesByPrefix {
+    <#
+    .SYNOPSIS
+    Gets configured export names that start with a specific prefix.
+    Supports grouped export patterns where multiple exports share collector logic.
+
+    .EXAMPLE
+    Get-ConfiguredExportNamesByPrefix -Prefix 'ACCOUNTMATCH_'
+    #>
+    param([Parameter(Mandatory)][string]$Prefix)
+
+    $normalizedPrefix = $Prefix.Trim().ToUpperInvariant()
+    $config = Get-ExportConfigFile
+    return @(
+        @($config['exports'].Keys) |
+            ForEach-Object { [string]$_ } |
+            Where-Object { $_.ToUpperInvariant().StartsWith($normalizedPrefix, [System.StringComparison]::Ordinal) } |
+            Sort-Object
+    )
+}
+
 function Get-ExportSetting {
     <#
     .SYNOPSIS
@@ -405,7 +426,7 @@ function Get-ExportIntSetting {
     Combines setting resolution with numeric validation for concise, safe numeric option handling.
 
     .EXAMPLE
-    Get-ExportIntSetting -ExportName 'LICENSES' -Name 'mappingCacheHours' -Default 24 -MinValue 1
+    Get-ExportIntSetting -ExportName 'LICENSES' -Name 'lowAvailableThreshold' -Default 5 -MinValue 0
     #>
     param(
         [Parameter(Mandatory)][string]$ExportName,
@@ -586,7 +607,7 @@ function Get-LicenseFriendlyNameMap {
     #>
     $defaultCsvUrl = 'https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv'
     $csvUrl = [string](Get-ExportSetting -ExportName 'LICENSES' -Name 'friendlyNamesSourceUrl' -Default $defaultCsvUrl)
-    $cacheHours = Get-ExportIntSetting -ExportName 'LICENSES' -Name 'mappingCacheHours' -Default 24 -MinValue 1
+    $cacheHours = 24
     $cachePath = Join-Path ([System.IO.Path]::GetTempPath()) 'export-license-map.csv'
 
     $downloadRequired = $true
@@ -738,18 +759,25 @@ function Get-ExportTitle {
         return "Export"
     }
     $knownTitles = @{
-        'ENTRAROLES' = 'Entra Roles'
+        'ENTRAROLEMEMBERS' = 'Entra Role Members'
         'GROUPMEMBERS' = 'Group Members'
         'AUGROUPMEMBERS' = 'Administrative Unit Group Members'
         'SUBSCRIPTIONS' = 'Subscriptions'
         'APPREGS' = 'App Registrations'
         'GRAPHPERMS' = 'Graph Permissions'
         'LICENSES' = 'Licenses'
-        'INACTIVEADMINS' = 'Inactive Admins'
+        'INACTIVEENTRAADMINS' = 'Inactive Entra Admins'
     }
     $normalized = $ExportName.Trim().ToUpperInvariant()
     if ($knownTitles.ContainsKey($normalized)) {
         return $knownTitles[$normalized]
+    }
+    if ($normalized.StartsWith('ACCOUNTMATCH_', [System.StringComparison]::Ordinal)) {
+        $suffix = $normalized.Substring('ACCOUNTMATCH_'.Length)
+        if ([string]::IsNullOrWhiteSpace($suffix)) {
+            return 'Account Match'
+        }
+        return "Account Match $suffix"
     }
     $title = $ExportName -replace '([a-z])([A-Z])', '$1 $2'
     if ($title.StartsWith("Export ", [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -1120,36 +1148,23 @@ function Resolve-GroupMemberExportGroupIds {
     return $groupIds
 }
 
-function Resolve-GroupMemberAdditionalProperties {
+function Resolve-GroupMemberProperties {
     <#
     .SYNOPSIS
-    Resolves additional user properties for group member export.
+    Resolves selected output properties for group member export.
     Combines shared and per-group exclusions so output columns match export intent.
 
     .EXAMPLE
-    Resolve-GroupMemberAdditionalProperties -GroupId '11111111-1111-1111-1111-111111111111'
+    Resolve-GroupMemberProperties -GroupId '11111111-1111-1111-1111-111111111111'
     #>
     param(
         [Parameter(Mandatory)]
         [string]$GroupId
     )
-    $basePropertiesValue = Get-ExportSetting -ExportName 'GROUPMEMBERS' -Name 'additionalProperties' -Default @()
-    $excludeByGroupValue = Get-ExportSetting -ExportName 'GROUPMEMBERS' -Name 'excludeAdditionalPropertiesByGroup' -Default @{}
+    $basePropertiesValue = Get-ExportSetting -ExportName 'GROUPMEMBERS' -Name 'properties' -Default @()
+    $excludeByGroupValue = Get-ExportSetting -ExportName 'GROUPMEMBERS' -Name 'excludePropertiesByGroup' -Default @{}
 
     $baseProperties = @(ConvertTo-NormalizedStringList -InputValues @($basePropertiesValue) -SplitCsv)
-    $reservedProperties = @{
-        'groupid' = $true
-        'groupdisplayname' = $true
-        'userid' = $true
-        'userprincipalname' = $true
-        'displayname' = $true
-        'usertype' = $true
-        'id' = $true
-    }
-    $baseProperties = @(
-        $baseProperties |
-            Where-Object { -not $reservedProperties.ContainsKey($_.ToLowerInvariant()) }
-    )
 
     $excludedProperties = @()
     if ($excludeByGroupValue -is [hashtable] -and $excludeByGroupValue.ContainsKey($GroupId)) {
@@ -1157,61 +1172,146 @@ function Resolve-GroupMemberAdditionalProperties {
         $excludedProperties = @(ConvertTo-NormalizedStringList -InputValues @($excludedValue) -SplitCsv)
     }
 
-    if ($excludedProperties.Count -eq 0) {
-        return $baseProperties
+    $effectiveProperties = @($baseProperties)
+    if ($excludedProperties.Count -gt 0) {
+        $excludedLookup = @{}
+        foreach ($name in $excludedProperties) {
+            $excludedLookup[$name.ToLowerInvariant()] = $true
+        }
+        $effectiveProperties = @(
+            $baseProperties |
+                Where-Object { -not $excludedLookup.ContainsKey($_.ToLowerInvariant()) }
+        )
     }
 
-    $excludedLookup = @{}
-    foreach ($name in $excludedProperties) {
-        $excludedLookup[$name.ToLowerInvariant()] = $true
+    # Always include user identity in GROUPMEMBERS exports.
+    if (-not (@($effectiveProperties | Where-Object { $_.ToLowerInvariant() -eq 'userid' }).Count -gt 0)) {
+        $effectiveProperties = @('UserId') + $effectiveProperties
     }
 
-    return @(
-        $baseProperties |
-            Where-Object { -not $excludedLookup.ContainsKey($_.ToLowerInvariant()) }
-    )
+    return $effectiveProperties
 }
 
-function Get-GroupMemberAdditionalPropertyPlan {
+function Get-GroupMemberPropertyPlan {
     <#
     .SYNOPSIS
     Builds select and output mappings for group member properties.
     Translates requested property names into Graph select fields and output column mapping rules.
 
     .EXAMPLE
-    Get-GroupMemberAdditionalPropertyPlan -AdditionalProperties @('mail','extensionAttribute2')
+    Get-GroupMemberPropertyPlan -Properties @('mail','extensionAttribute2')
     #>
     param(
         [AllowNull()]
-        [object[]]$AdditionalProperties
+        [object[]]$Properties,
+        [switch]$IncludeAdministrativeUnitContext
     )
 
     $selectProperties = @()
     $outputMappings = @()
 
-    foreach ($rawPropertyName in @($AdditionalProperties)) {
+    foreach ($rawPropertyName in @($Properties)) {
         $propertyName = [string]$rawPropertyName
         if ([string]::IsNullOrWhiteSpace($propertyName)) {
             continue
         }
         $propertyName = $propertyName.Trim()
+        $normalizedPropertyName = $propertyName.ToLowerInvariant()
 
-        if ($propertyName -match '^extensionattribute([1-9]|1[0-5])$') {
+        if ($normalizedPropertyName -eq 'groupid') {
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'GroupId'
+                SourceScope    = 'context'
+                SourceProperty = 'GroupId'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'groupdisplayname') {
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'GroupDisplayName'
+                SourceScope    = 'context'
+                SourceProperty = 'GroupDisplayName'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($IncludeAdministrativeUnitContext -and $normalizedPropertyName -eq 'administrativeunitid') {
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'AdministrativeUnitId'
+                SourceScope    = 'context'
+                SourceProperty = 'AdministrativeUnitId'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($IncludeAdministrativeUnitContext -and $normalizedPropertyName -eq 'administrativeunitdisplayname') {
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'AdministrativeUnitDisplayName'
+                SourceScope    = 'context'
+                SourceProperty = 'AdministrativeUnitDisplayName'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'userid') {
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'UserId'
+                SourceScope    = 'member'
+                SourceProperty = 'id'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'userprincipalname') {
+            $selectProperties += 'userPrincipalName'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'UserPrincipalName'
+                SourceScope    = 'member'
+                SourceProperty = 'userPrincipalName'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'displayname') {
+            $selectProperties += 'displayName'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'DisplayName'
+                SourceScope    = 'member'
+                SourceProperty = 'displayName'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'usertype') {
+            $selectProperties += 'userType'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'UserType'
+                SourceScope    = 'member'
+                SourceProperty = 'userType'
+                NestedProperty = $null
+            }
+            continue
+        }
+
+        if ($normalizedPropertyName -match '^extensionattribute([1-9]|1[0-5])$') {
             $attributeName = "extensionAttribute$($Matches[1])"
             $selectProperties += 'onPremisesExtensionAttributes'
             $outputMappings += [PSCustomObject]@{
                 OutputName     = $propertyName
+                SourceScope    = 'member'
                 SourceProperty = 'onPremisesExtensionAttributes'
                 NestedProperty = $attributeName
             }
             continue
         }
 
-        if ($propertyName -match '^onpremisesextensionattributes\.(extensionattribute([1-9]|1[0-5]))$') {
+        if ($normalizedPropertyName -match '^onpremisesextensionattributes\.(extensionattribute([1-9]|1[0-5]))$') {
             $attributeName = "extensionAttribute$($Matches[2])"
             $selectProperties += 'onPremisesExtensionAttributes'
             $outputMappings += [PSCustomObject]@{
                 OutputName     = $propertyName
+                SourceScope    = 'member'
                 SourceProperty = 'onPremisesExtensionAttributes'
                 NestedProperty = $attributeName
             }
@@ -1221,6 +1321,7 @@ function Get-GroupMemberAdditionalPropertyPlan {
         $selectProperties += $propertyName
         $outputMappings += [PSCustomObject]@{
             OutputName     = $propertyName
+            SourceScope    = 'member'
             SourceProperty = $propertyName
             NestedProperty = $null
         }
@@ -1232,11 +1333,38 @@ function Get-GroupMemberAdditionalPropertyPlan {
     }
 }
 
+function Get-InvalidSelectPropertyNameFromError {
+    <#
+    .SYNOPSIS
+    Attempts to extract an invalid select property name from Microsoft Graph error text.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    $messages = @()
+    if ($ErrorRecord.Exception) {
+        $messages += [string]$ErrorRecord.Exception.Message
+    }
+    if ($ErrorRecord.ErrorDetails) {
+        $messages += [string]$ErrorRecord.ErrorDetails.Message
+    }
+
+    foreach ($message in @($messages | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        if ($message -match "property named '([^']+)'") { return [string]$Matches[1] }
+        if ($message -match "property '([^']+)'") { return [string]$Matches[1] }
+        if ($message -match "\$select[^']*'([^']+)'") { return [string]$Matches[1] }
+    }
+
+    return $null
+}
+
 function Get-GroupMembersExport {
     <#
     .SYNOPSIS
     Builds the group members export dataset.
-    Queries transitive user membership per target group and shapes rows with configured extra properties.
+    Queries transitive user membership per target group and shapes rows with configured properties.
 
     .EXAMPLE
     Get-GroupMembersExport -GroupId '11111111-1111-1111-1111-111111111111'
@@ -1256,6 +1384,7 @@ function Get-GroupMembersExport {
     $rows = @()
     $groupsWithZeroMembers = 0
     $totalMembers = 0
+    $groupsSkippedNoValidProperties = 0
     foreach ($resolvedGroupId in $groupIds) {
         $groupDisplayName = $null
         try {
@@ -1270,43 +1399,89 @@ function Get-GroupMembersExport {
             throw "Failed loading GROUPMEMBERS group metadata for group '$resolvedGroupId': $($_.Exception.Message)"
         }
 
-        $additionalProperties = Resolve-GroupMemberAdditionalProperties -GroupId $resolvedGroupId
-        $propertyPlan = Get-GroupMemberAdditionalPropertyPlan -AdditionalProperties $additionalProperties
-        $selectProperties = @('id', 'userPrincipalName', 'displayName', 'userType') + $propertyPlan.SelectProperties | Select-Object -Unique
-        $selectQuery = [string]::Join(',', $selectProperties)
-        try {
-            $groupMemberParams = @{
-                GroupId = $resolvedGroupId
-                All = $true
-                Property = $selectQuery
-                ErrorAction = 'Stop'
+        $requestedProperties = @(Resolve-GroupMemberProperties -GroupId $resolvedGroupId)
+        if (@($requestedProperties).Count -eq 0) {
+            $groupsSkippedNoValidProperties++
+            Write-Warning "GROUPMEMBERS export has no configured properties for group '$resolvedGroupId'. Set exports.GROUPMEMBERS.properties."
+            Write-ExportRuntimeLog -Stage 'collect' -Event 'group_skipped_no_properties' -Status 'warn' -Data @{
+                groupId = $resolvedGroupId
             }
-            $members = @(Get-MgGroupTransitiveMemberAsUser @groupMemberParams)
-        } catch {
-            throw "Failed loading GROUPMEMBERS users for group '$resolvedGroupId' with select '$selectQuery': $($_.Exception.Message)"
+            continue
         }
+
+        $members = @()
+        $propertyPlan = $null
+        $remainingProperties = @($requestedProperties)
+        while ($true) {
+            $propertyPlan = Get-GroupMemberPropertyPlan -Properties $remainingProperties
+            if (@($propertyPlan.OutputMappings).Count -eq 0) {
+                $groupsSkippedNoValidProperties++
+                Write-Warning "GROUPMEMBERS export has no valid properties after filtering for group '$resolvedGroupId'."
+                Write-ExportRuntimeLog -Stage 'collect' -Event 'group_skipped_no_valid_properties' -Status 'warn' -Data @{
+                    groupId = $resolvedGroupId
+                }
+                break
+            }
+
+            $selectProperties = @('id') + $propertyPlan.SelectProperties | Select-Object -Unique
+            $selectQuery = [string]::Join(',', $selectProperties)
+            try {
+                $groupMemberParams = @{
+                    GroupId = $resolvedGroupId
+                    All = $true
+                    Property = $selectQuery
+                    ErrorAction = 'Stop'
+                }
+                $members = @(Get-MgGroupTransitiveMemberAsUser @groupMemberParams)
+                break
+            } catch {
+                $invalidProperty = Get-InvalidSelectPropertyNameFromError -ErrorRecord $_
+                if ([string]::IsNullOrWhiteSpace($invalidProperty)) {
+                    throw "Failed loading GROUPMEMBERS users for group '$resolvedGroupId' with select '$selectQuery': $($_.Exception.Message)"
+                }
+
+                $invalidLookup = $invalidProperty.Trim().ToLowerInvariant()
+                $filteredProperties = @($remainingProperties | Where-Object { $_.ToLowerInvariant() -ne $invalidLookup })
+                if (@($filteredProperties).Count -eq @($remainingProperties).Count) {
+                    throw "Failed loading GROUPMEMBERS users for group '$resolvedGroupId' with select '$selectQuery': $($_.Exception.Message)"
+                }
+
+                Write-Warning "GROUPMEMBERS property '$invalidProperty' is invalid and will be skipped for group '$resolvedGroupId'."
+                Write-ExportRuntimeLog -Stage 'collect' -Event 'property_removed_invalid' -Status 'warn' -Data @{
+                    groupId = $resolvedGroupId
+                    property = $invalidProperty
+                }
+                $remainingProperties = $filteredProperties
+            }
+        }
+        if ($null -eq $propertyPlan -or @($propertyPlan.OutputMappings).Count -eq 0) {
+            continue
+        }
+
         $memberCount = @($members).Count
         $totalMembers += $memberCount
         if ($memberCount -eq 0) {
             $groupsWithZeroMembers++
         }
         foreach ($member in $members) {
-            $userType = [string](Get-ObjectPropertyValue -InputObject $member -Name 'userType')
             $row = [ordered]@{
-                GroupId           = $resolvedGroupId
-                GroupDisplayName  = $groupDisplayName
-                UserId            = [string](Get-ObjectPropertyValue -InputObject $member -Name 'id')
-                UserPrincipalName = [string](Get-ObjectPropertyValue -InputObject $member -Name 'userPrincipalName')
-                DisplayName       = [string](Get-ObjectPropertyValue -InputObject $member -Name 'displayName')
-                UserType          = $userType
+                __PartitionGroupId = $resolvedGroupId
             }
             foreach ($propertyMapping in $propertyPlan.OutputMappings) {
                 $value = $null
-                if (Test-HasUsableValue -Value $propertyMapping.NestedProperty) {
-                    $parentObject = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
-                    $value = Get-ObjectPropertyValue -InputObject $parentObject -Name $propertyMapping.NestedProperty
+                if ($propertyMapping.SourceScope -eq 'context') {
+                    switch ([string]$propertyMapping.SourceProperty) {
+                        'GroupId' { $value = $resolvedGroupId }
+                        'GroupDisplayName' { $value = $groupDisplayName }
+                        default { $value = $null }
+                    }
                 } else {
-                    $value = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
+                    if (Test-HasUsableValue -Value $propertyMapping.NestedProperty) {
+                        $parentObject = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
+                        $value = Get-ObjectPropertyValue -InputObject $parentObject -Name $propertyMapping.NestedProperty
+                    } else {
+                        $value = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
+                    }
                 }
                 $row[[string]$propertyMapping.OutputName] = $value
             }
@@ -1317,6 +1492,7 @@ function Get-GroupMembersExport {
     Write-ExportRuntimeLog -Stage 'collect' -Event 'summary' -Status 'ok' -Data @{
         targetGroups = @($groupIds).Count
         groupsWithZeroMembers = $groupsWithZeroMembers
+        groupsSkippedNoValidProperties = $groupsSkippedNoValidProperties
         members = $totalMembers
         rows = @($rows).Count
         durationMs = (Get-ElapsedMilliseconds -StartedAtUtc $startedAtUtc)
@@ -1353,59 +1529,31 @@ function Resolve-AuGroupMemberExportAdministrativeUnitIds {
     return $administrativeUnitIds
 }
 
-function Resolve-AuGroupMemberAdditionalProperties {
+function Resolve-AuGroupMemberProperties {
     <#
     .SYNOPSIS
-    Resolves additional user properties for AU group member export.
-    Combines shared and per-group exclusions so output columns match export intent.
+    Resolves selected output properties for AU group member export.
+    Applies configured properties and enforces required AU/group/user identity columns.
 
     .EXAMPLE
-    Resolve-AuGroupMemberAdditionalProperties -GroupId '11111111-1111-1111-1111-111111111111'
+    Resolve-AuGroupMemberProperties
     #>
-    param(
-        [Parameter(Mandatory)]
-        [string]$GroupId
-    )
-    $basePropertiesValue = Get-ExportSetting -ExportName 'AUGROUPMEMBERS' -Name 'additionalProperties' -Default @()
-    $excludeByGroupValue = Get-ExportSetting -ExportName 'AUGROUPMEMBERS' -Name 'excludeAdditionalPropertiesByGroup' -Default @{}
+    param()
+    $basePropertiesValue = Get-ExportSetting -ExportName 'AUGROUPMEMBERS' -Name 'properties' -Default @()
 
     $baseProperties = @(ConvertTo-NormalizedStringList -InputValues @($basePropertiesValue) -SplitCsv)
-    $reservedProperties = @{
-        'administrativeunitid' = $true
-        'administrativeunitdisplayname' = $true
-        'groupid' = $true
-        'groupdisplayname' = $true
-        'groupmailnickname' = $true
-        'userid' = $true
-        'userprincipalname' = $true
-        'displayname' = $true
-        'usertype' = $true
-        'id' = $true
-    }
-    $baseProperties = @(
-        $baseProperties |
-            Where-Object { -not $reservedProperties.ContainsKey($_.ToLowerInvariant()) }
-    )
+    $effectiveProperties = @($baseProperties)
 
-    $excludedProperties = @()
-    if ($excludeByGroupValue -is [hashtable] -and $excludeByGroupValue.ContainsKey($GroupId)) {
-        $excludedValue = $excludeByGroupValue[$GroupId]
-        $excludedProperties = @(ConvertTo-NormalizedStringList -InputValues @($excludedValue) -SplitCsv)
+    # Always include AU/group/user identity in AUGROUPMEMBERS exports.
+    $requiredProperties = @('AdministrativeUnitId', 'GroupId', 'GroupDisplayName', 'UserId')
+    for ($i = $requiredProperties.Count - 1; $i -ge 0; $i--) {
+        $requiredProperty = $requiredProperties[$i]
+        if (-not (@($effectiveProperties | Where-Object { $_.ToLowerInvariant() -eq $requiredProperty.ToLowerInvariant() }).Count -gt 0)) {
+            $effectiveProperties = @($requiredProperty) + $effectiveProperties
+        }
     }
 
-    if ($excludedProperties.Count -eq 0) {
-        return $baseProperties
-    }
-
-    $excludedLookup = @{}
-    foreach ($name in $excludedProperties) {
-        $excludedLookup[$name.ToLowerInvariant()] = $true
-    }
-
-    return @(
-        $baseProperties |
-            Where-Object { -not $excludedLookup.ContainsKey($_.ToLowerInvariant()) }
-    )
+    return $effectiveProperties
 }
 
 function Get-AuGroupMemberGroupTargets {
@@ -1497,26 +1645,73 @@ function Get-AuGroupMembersExport {
     $rows = @()
     $groupsWithZeroMembers = 0
     $totalMembers = 0
+    $groupsSkippedNoValidProperties = 0
     foreach ($target in $targets) {
         $groupId = [string]$target.GroupId
         if ([string]::IsNullOrWhiteSpace($groupId)) {
             continue
         }
 
-        $additionalProperties = Resolve-AuGroupMemberAdditionalProperties -GroupId $groupId
-        $propertyPlan = Get-GroupMemberAdditionalPropertyPlan -AdditionalProperties $additionalProperties
-        $selectProperties = @('id', 'userPrincipalName', 'displayName', 'userType') + $propertyPlan.SelectProperties | Select-Object -Unique
-        $selectQuery = [string]::Join(',', $selectProperties)
-        try {
-            $auGroupMemberParams = @{
-                GroupId = $groupId
-                All = $true
-                Property = $selectQuery
-                ErrorAction = 'Stop'
+        $requestedProperties = @(Resolve-AuGroupMemberProperties)
+        if (@($requestedProperties).Count -eq 0) {
+            $groupsSkippedNoValidProperties++
+            Write-Warning "AUGROUPMEMBERS export has no configured properties for group '$groupId'. Set exports.AUGROUPMEMBERS.properties."
+            Write-ExportRuntimeLog -Stage 'collect' -Event 'group_skipped_no_properties' -Status 'warn' -Data @{
+                administrativeUnitId = [string]$target.AdministrativeUnitId
+                groupId = $groupId
             }
-            $members = @(Get-MgGroupTransitiveMemberAsUser @auGroupMemberParams)
-        } catch {
-            throw "Failed loading AUGROUPMEMBERS users for administrative unit '$($target.AdministrativeUnitId)' and group '$groupId' with select '$selectQuery': $($_.Exception.Message)"
+            continue
+        }
+
+        $members = @()
+        $propertyPlan = $null
+        $remainingProperties = @($requestedProperties)
+        while ($true) {
+            $propertyPlan = Get-GroupMemberPropertyPlan -Properties $remainingProperties -IncludeAdministrativeUnitContext
+            if (@($propertyPlan.OutputMappings).Count -eq 0) {
+                $groupsSkippedNoValidProperties++
+                Write-Warning "AUGROUPMEMBERS export has no valid properties after filtering for group '$groupId'."
+                Write-ExportRuntimeLog -Stage 'collect' -Event 'group_skipped_no_valid_properties' -Status 'warn' -Data @{
+                    administrativeUnitId = [string]$target.AdministrativeUnitId
+                    groupId = $groupId
+                }
+                break
+            }
+
+            $selectProperties = @('id') + $propertyPlan.SelectProperties | Select-Object -Unique
+            $selectQuery = [string]::Join(',', $selectProperties)
+            try {
+                $auGroupMemberParams = @{
+                    GroupId = $groupId
+                    All = $true
+                    Property = $selectQuery
+                    ErrorAction = 'Stop'
+                }
+                $members = @(Get-MgGroupTransitiveMemberAsUser @auGroupMemberParams)
+                break
+            } catch {
+                $invalidProperty = Get-InvalidSelectPropertyNameFromError -ErrorRecord $_
+                if ([string]::IsNullOrWhiteSpace($invalidProperty)) {
+                    throw "Failed loading AUGROUPMEMBERS users for administrative unit '$($target.AdministrativeUnitId)' and group '$groupId' with select '$selectQuery': $($_.Exception.Message)"
+                }
+
+                $invalidLookup = $invalidProperty.Trim().ToLowerInvariant()
+                $filteredProperties = @($remainingProperties | Where-Object { $_.ToLowerInvariant() -ne $invalidLookup })
+                if (@($filteredProperties).Count -eq @($remainingProperties).Count) {
+                    throw "Failed loading AUGROUPMEMBERS users for administrative unit '$($target.AdministrativeUnitId)' and group '$groupId' with select '$selectQuery': $($_.Exception.Message)"
+                }
+
+                Write-Warning "AUGROUPMEMBERS property '$invalidProperty' is invalid and will be skipped for group '$groupId'."
+                Write-ExportRuntimeLog -Stage 'collect' -Event 'property_removed_invalid' -Status 'warn' -Data @{
+                    administrativeUnitId = [string]$target.AdministrativeUnitId
+                    groupId = $groupId
+                    property = $invalidProperty
+                }
+                $remainingProperties = $filteredProperties
+            }
+        }
+        if ($null -eq $propertyPlan -or @($propertyPlan.OutputMappings).Count -eq 0) {
+            continue
         }
 
         $memberCount = @($members).Count
@@ -1526,24 +1721,26 @@ function Get-AuGroupMembersExport {
         }
 
         foreach ($member in $members) {
-            $userType = [string](Get-ObjectPropertyValue -InputObject $member -Name 'userType')
             $row = [ordered]@{
-                AdministrativeUnitId          = [string]$target.AdministrativeUnitId
-                AdministrativeUnitDisplayName = [string]$target.AdministrativeUnitDisplayName
-                GroupId                       = $groupId
-                GroupDisplayName              = [string]$target.GroupDisplayName
-                UserId                        = [string](Get-ObjectPropertyValue -InputObject $member -Name 'id')
-                UserPrincipalName             = [string](Get-ObjectPropertyValue -InputObject $member -Name 'userPrincipalName')
-                DisplayName                   = [string](Get-ObjectPropertyValue -InputObject $member -Name 'displayName')
-                UserType                      = $userType
+                __PartitionAdministrativeUnitId = [string]$target.AdministrativeUnitId
             }
             foreach ($propertyMapping in $propertyPlan.OutputMappings) {
                 $value = $null
-                if (Test-HasUsableValue -Value $propertyMapping.NestedProperty) {
-                    $parentObject = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
-                    $value = Get-ObjectPropertyValue -InputObject $parentObject -Name $propertyMapping.NestedProperty
+                if ($propertyMapping.SourceScope -eq 'context') {
+                    switch ([string]$propertyMapping.SourceProperty) {
+                        'AdministrativeUnitId' { $value = [string]$target.AdministrativeUnitId }
+                        'AdministrativeUnitDisplayName' { $value = [string]$target.AdministrativeUnitDisplayName }
+                        'GroupId' { $value = $groupId }
+                        'GroupDisplayName' { $value = [string]$target.GroupDisplayName }
+                        default { $value = $null }
+                    }
                 } else {
-                    $value = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
+                    if (Test-HasUsableValue -Value $propertyMapping.NestedProperty) {
+                        $parentObject = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
+                        $value = Get-ObjectPropertyValue -InputObject $parentObject -Name $propertyMapping.NestedProperty
+                    } else {
+                        $value = Get-ObjectPropertyValue -InputObject $member -Name $propertyMapping.SourceProperty
+                    }
                 }
                 $row[[string]$propertyMapping.OutputName] = $value
             }
@@ -1554,6 +1751,7 @@ function Get-AuGroupMembersExport {
     Write-ExportRuntimeLog -Stage 'collect' -Event 'summary' -Status 'ok' -Data @{
         groups = @($targets).Count
         groupsWithZeroMembers = $groupsWithZeroMembers
+        groupsSkippedNoValidProperties = $groupsSkippedNoValidProperties
         members = $totalMembers
         rows = @($rows).Count
         durationMs = (Get-ElapsedMilliseconds -StartedAtUtc $startedAtUtc)
@@ -1972,20 +2170,20 @@ function Get-LicenseExport {
     return $rows
 }
 
-function Get-InactiveAdminAccountsExport {
+function Get-InactiveEntraAdminAccountsExport {
     <#
     .SYNOPSIS
     Builds the inactive admin accounts export dataset.
     Correlates privileged role assignments with sign-in activity to identify inactive admin users.
 
     .EXAMPLE
-    Get-InactiveAdminAccountsExport
+    Get-InactiveEntraAdminAccountsExport
     #>
     $startedAtUtc = (Get-Date).ToUniversalTime()
     Write-ExportRuntimeLog -Stage 'collect' -Event 'start' -Status 'ok'
     Connect-ToMicrosoftGraph | Out-Null
 
-    $inactiveThresholdDays = Get-ExportIntSetting -ExportName 'INACTIVEADMINS' -Name 'days' -Default 90 -MinValue 1
+    $inactiveThresholdDays = Get-ExportIntSetting -ExportName 'INACTIVEENTRAADMINS' -Name 'days' -Default 90 -MinValue 1
     $roleDefinitions = @(
         Get-MgRoleManagementDirectoryRoleDefinition -All -Property 'id,displayName' -ErrorAction Stop
     )
@@ -2122,6 +2320,307 @@ function Get-InactiveAdminAccountsExport {
     return $rows
 }
 
+function Get-AccountMatchReasons {
+    <#
+    .SYNOPSIS
+    Evaluates account naming rules and returns matched reasons.
+    #>
+    param(
+        [AllowNull()][string]$UserPrincipalName,
+        [AllowNull()][string]$DisplayName,
+        [Parameter(Mandatory)][hashtable]$Rules
+    )
+
+    $reasons = @()
+    $upn = if ([string]::IsNullOrWhiteSpace($UserPrincipalName)) { '' } else { $UserPrincipalName.Trim().ToLowerInvariant() }
+    $name = if ([string]::IsNullOrWhiteSpace($DisplayName)) { '' } else { $DisplayName.Trim().ToLowerInvariant() }
+
+    foreach ($needle in @($Rules.upnStartsWith)) {
+        if (-not [string]::IsNullOrWhiteSpace($upn) -and $upn.StartsWith($needle, [System.StringComparison]::Ordinal)) {
+            $reasons += "upnStartsWith:$needle"
+        }
+    }
+    foreach ($needle in @($Rules.upnContains)) {
+        if (-not [string]::IsNullOrWhiteSpace($upn) -and $upn.Contains($needle)) {
+            $reasons += "upnContains:$needle"
+        }
+    }
+    foreach ($needle in @($Rules.displayNameContains)) {
+        if (-not [string]::IsNullOrWhiteSpace($name) -and $name.Contains($needle)) {
+            $reasons += "displayNameContains:$needle"
+        }
+    }
+
+    return @($reasons | Select-Object -Unique)
+}
+
+function Get-AccountMatchPropertyPlan {
+    <#
+    .SYNOPSIS
+    Builds select and output mappings for account match export properties.
+    #>
+    param(
+        [AllowNull()]
+        [object[]]$Properties
+    )
+
+    $selectProperties = @()
+    $outputMappings = @()
+
+    foreach ($rawPropertyName in @($Properties)) {
+        $propertyName = [string]$rawPropertyName
+        if ([string]::IsNullOrWhiteSpace($propertyName)) {
+            continue
+        }
+        $propertyName = $propertyName.Trim()
+        $normalizedPropertyName = $propertyName.ToLowerInvariant()
+
+        if ($normalizedPropertyName -eq 'userid') {
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'UserId'
+                SourceProperty = 'id'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'userprincipalname') {
+            $selectProperties += 'userPrincipalName'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'UserPrincipalName'
+                SourceProperty = 'userPrincipalName'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'displayname') {
+            $selectProperties += 'displayName'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'DisplayName'
+                SourceProperty = 'displayName'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'mail') {
+            $selectProperties += 'mail'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'Mail'
+                SourceProperty = 'mail'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'usertype') {
+            $selectProperties += 'userType'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'UserType'
+                SourceProperty = 'userType'
+                NestedProperty = $null
+            }
+            continue
+        }
+        if ($normalizedPropertyName -eq 'accountenabled') {
+            $selectProperties += 'accountEnabled'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = 'AccountEnabled'
+                SourceProperty = 'accountEnabled'
+                NestedProperty = $null
+            }
+            continue
+        }
+
+        if ($normalizedPropertyName -match '^extensionattribute([1-9]|1[0-5])$') {
+            $attributeName = "extensionAttribute$($Matches[1])"
+            $selectProperties += 'onPremisesExtensionAttributes'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = $propertyName
+                SourceProperty = 'onPremisesExtensionAttributes'
+                NestedProperty = $attributeName
+            }
+            continue
+        }
+
+        if ($normalizedPropertyName -match '^onpremisesextensionattributes\.(extensionattribute([1-9]|1[0-5]))$') {
+            $attributeName = "extensionAttribute$($Matches[2])"
+            $selectProperties += 'onPremisesExtensionAttributes'
+            $outputMappings += [PSCustomObject]@{
+                OutputName     = $propertyName
+                SourceProperty = 'onPremisesExtensionAttributes'
+                NestedProperty = $attributeName
+            }
+            continue
+        }
+
+        $selectProperties += $propertyName
+        $outputMappings += [PSCustomObject]@{
+            OutputName     = $propertyName
+            SourceProperty = $propertyName
+            NestedProperty = $null
+        }
+    }
+
+    return [PSCustomObject]@{
+        SelectProperties = @($selectProperties | Select-Object -Unique)
+        OutputMappings   = @($outputMappings)
+    }
+}
+
+function Get-AccountMatchesExport {
+    <#
+    .SYNOPSIS
+    Builds an account inventory export dataset based on naming rules.
+
+    .EXAMPLE
+    Get-AccountMatchesExport -ExportName 'ACCOUNTMATCH_ADM'
+    #>
+    param([Parameter(Mandatory)][string]$ExportName)
+
+    $normalizedExportName = $ExportName.Trim().ToUpperInvariant()
+    $startedAtUtc = (Get-Date).ToUniversalTime()
+    Write-ExportRuntimeLog -Stage 'collect' -Event 'start' -Status 'ok'
+    Connect-ToMicrosoftGraph | Out-Null
+
+    $requestedProperties = @(
+        ConvertTo-NormalizedStringList -InputValues @(
+            Get-ExportSetting -ExportName $normalizedExportName -Name 'properties' -Default @()
+        ) -SplitCsv
+    )
+    # Always include user identity in ACCOUNTMATCH_* exports.
+    if (-not (@($requestedProperties | Where-Object { $_.ToLowerInvariant() -eq 'userid' }).Count -gt 0)) {
+        $requestedProperties = @('UserId') + $requestedProperties
+    }
+
+    $rules = @{
+        upnStartsWith = @(
+            ConvertTo-NormalizedStringList -InputValues @(
+                Get-ExportSetting -ExportName $normalizedExportName -Name 'upnStartsWith' -Default @()
+            ) -SplitCsv | ForEach-Object { $_.ToLowerInvariant() }
+        )
+        upnContains = @(
+            ConvertTo-NormalizedStringList -InputValues @(
+                Get-ExportSetting -ExportName $normalizedExportName -Name 'upnContains' -Default @()
+            ) -SplitCsv | ForEach-Object { $_.ToLowerInvariant() }
+        )
+        displayNameContains = @(
+            ConvertTo-NormalizedStringList -InputValues @(
+                Get-ExportSetting -ExportName $normalizedExportName -Name 'displayNameContains' -Default @()
+            ) -SplitCsv | ForEach-Object { $_.ToLowerInvariant() }
+        )
+    }
+
+    $ruleCount = @($rules.upnStartsWith).Count + @($rules.upnContains).Count + @($rules.displayNameContains).Count
+    if ($ruleCount -eq 0) {
+        Write-Warning "$normalizedExportName export has no matching rules configured. Set upnStartsWith/upnContains/displayNameContains."
+        Write-ExportRuntimeLog -Stage 'collect' -Event 'rules_empty' -Status 'warn'
+    }
+
+    $rows = @()
+    $propertyPlan = $null
+    $remainingProperties = @($requestedProperties)
+    $usersProcessed = 0
+    while ($true) {
+        $propertyPlan = Get-AccountMatchPropertyPlan -Properties $remainingProperties
+        if (@($propertyPlan.OutputMappings).Count -eq 0) {
+            Write-Warning "$normalizedExportName export has no valid properties after filtering invalid properties."
+            Write-ExportRuntimeLog -Stage 'collect' -Event 'skipped_no_valid_properties' -Status 'warn'
+            return @()
+        }
+
+        $rows = @()
+        $usersProcessed = 0
+        $selectProperties = @('id', 'userPrincipalName', 'displayName') + $propertyPlan.SelectProperties | Select-Object -Unique
+        $selectQuery = [string]::Join(',', $selectProperties)
+        $nextLink = "https://graph.microsoft.com/v1.0/users?`$select=$selectQuery&`$top=999"
+        $retryRequired = $false
+
+        do {
+            $page = $null
+            try {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $nextLink -OutputType PSObject -ErrorAction Stop
+            } catch {
+                $invalidProperty = Get-InvalidSelectPropertyNameFromError -ErrorRecord $_
+                if ([string]::IsNullOrWhiteSpace($invalidProperty)) {
+                    throw "Failed loading $normalizedExportName users with select '$selectQuery': $($_.Exception.Message)"
+                }
+
+                $invalidLookup = $invalidProperty.Trim().ToLowerInvariant()
+                $filteredProperties = @($remainingProperties | Where-Object { $_.ToLowerInvariant() -ne $invalidLookup })
+                if (@($filteredProperties).Count -eq @($remainingProperties).Count) {
+                    throw "Failed loading $normalizedExportName users with select '$selectQuery': $($_.Exception.Message)"
+                }
+
+                Write-Warning "$normalizedExportName property '$invalidProperty' is invalid and will be skipped."
+                Write-ExportRuntimeLog -Stage 'collect' -Event 'property_removed_invalid' -Status 'warn' -Data @{
+                    property = $invalidProperty
+                }
+                $remainingProperties = $filteredProperties
+                $retryRequired = $true
+                break
+            }
+
+            $pageUsers = @(
+                Get-ObjectPropertyValue -InputObject $page -Name 'value'
+            )
+            foreach ($user in $pageUsers) {
+                $usersProcessed++
+                $userPrincipalName = [string](Get-ObjectPropertyValue -InputObject $user -Name 'userPrincipalName')
+                $displayName = [string](Get-ObjectPropertyValue -InputObject $user -Name 'displayName')
+                $matchReasons = Get-AccountMatchReasons -UserPrincipalName $userPrincipalName -DisplayName $displayName -Rules $rules
+                $isMatch = @($matchReasons).Count -gt 0
+                if (-not $isMatch) {
+                    continue
+                }
+
+                $row = [ordered]@{
+                    __SortUserPrincipalName = $userPrincipalName
+                    __SortDisplayName = $displayName
+                }
+                foreach ($propertyMapping in $propertyPlan.OutputMappings) {
+                    $value = $null
+                    if (Test-HasUsableValue -Value $propertyMapping.NestedProperty) {
+                        $parentObject = Get-ObjectPropertyValue -InputObject $user -Name $propertyMapping.SourceProperty
+                        $value = Get-ObjectPropertyValue -InputObject $parentObject -Name $propertyMapping.NestedProperty
+                    } else {
+                        $value = Get-ObjectPropertyValue -InputObject $user -Name $propertyMapping.SourceProperty
+                    }
+                    $row[[string]$propertyMapping.OutputName] = $value
+                }
+                $rows += [PSCustomObject]$row
+            }
+
+            $nextLink = [string](Get-ObjectPropertyValue -InputObject $page -Name '@odata.nextLink')
+            if ([string]::IsNullOrWhiteSpace($nextLink)) {
+                $nextLink = $null
+            }
+        } while ($null -ne $nextLink)
+
+        if (-not $retryRequired) {
+            break
+        }
+    }
+
+    $sortedRows = @(
+        $rows |
+            Sort-Object __SortUserPrincipalName, __SortDisplayName |
+            ForEach-Object {
+                $cleanRow = [ordered]@{}
+                foreach ($prop in $_.PSObject.Properties) {
+                    if (-not $prop.Name.StartsWith('__', [System.StringComparison]::Ordinal)) {
+                        $cleanRow[[string]$prop.Name] = $prop.Value
+                    }
+                }
+                [PSCustomObject]$cleanRow
+            }
+    )
+    Write-ExportRuntimeLog -Stage 'collect' -Event 'summary' -Status 'ok' -Data @{
+        usersProcessed = $usersProcessed
+        rows = @($sortedRows).Count
+        ruleCount = $ruleCount
+        durationMs = (Get-ElapsedMilliseconds -StartedAtUtc $startedAtUtc)
+    }
+    return $sortedRows
+}
+
 function Invoke-Export {
     <#
     .SYNOPSIS
@@ -2161,7 +2660,14 @@ function Invoke-Export {
             $rows = @($data)
             $groupIds = @(
                 $rows |
-                    ForEach-Object { $_.GroupId } |
+                    ForEach-Object {
+                        $partitionGroupId = [string](Get-ObjectPropertyValue -InputObject $_ -Name '__PartitionGroupId')
+                        if (-not [string]::IsNullOrWhiteSpace($partitionGroupId)) {
+                            $partitionGroupId
+                        } else {
+                            [string](Get-ObjectPropertyValue -InputObject $_ -Name 'GroupId')
+                        }
+                    } |
                     Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
                     Select-Object -Unique
             )
@@ -2180,7 +2686,26 @@ function Invoke-Export {
             $partitionsWithRows = 0
             $blobsWritten = 0
             foreach ($groupId in $groupIds) {
-                $groupRows = @($rows | Where-Object { $_.GroupId -eq $groupId })
+                $groupRows = @(
+                    $rows |
+                        Where-Object {
+                            $partitionGroupId = [string](Get-ObjectPropertyValue -InputObject $_ -Name '__PartitionGroupId')
+                            if (-not [string]::IsNullOrWhiteSpace($partitionGroupId)) {
+                                $partitionGroupId -eq $groupId
+                            } else {
+                                ([string](Get-ObjectPropertyValue -InputObject $_ -Name 'GroupId')) -eq $groupId
+                            }
+                        } |
+                        ForEach-Object {
+                            $cleanRow = [ordered]@{}
+                            foreach ($prop in $_.PSObject.Properties) {
+                                if (-not $prop.Name.StartsWith('__', [System.StringComparison]::Ordinal)) {
+                                    $cleanRow[[string]$prop.Name] = $prop.Value
+                                }
+                            }
+                            [PSCustomObject]$cleanRow
+                        }
+                )
                 if ($groupRows.Count -gt 0) {
                     $partitionsWithRows++
                 }
@@ -2218,7 +2743,14 @@ function Invoke-Export {
             $rows = @($data)
             $administrativeUnitIds = @(
                 $rows |
-                    ForEach-Object { [string]$_.AdministrativeUnitId } |
+                    ForEach-Object {
+                        $partitionAdministrativeUnitId = [string](Get-ObjectPropertyValue -InputObject $_ -Name '__PartitionAdministrativeUnitId')
+                        if (-not [string]::IsNullOrWhiteSpace($partitionAdministrativeUnitId)) {
+                            $partitionAdministrativeUnitId
+                        } else {
+                            [string](Get-ObjectPropertyValue -InputObject $_ -Name 'AdministrativeUnitId')
+                        }
+                    } |
                     Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
                     Sort-Object -Unique
             )
@@ -2237,7 +2769,21 @@ function Invoke-Export {
                 $groupRows = @(
                     $rows |
                         Where-Object {
-                            $_.AdministrativeUnitId -eq $administrativeUnitId
+                            $partitionAdministrativeUnitId = [string](Get-ObjectPropertyValue -InputObject $_ -Name '__PartitionAdministrativeUnitId')
+                            if (-not [string]::IsNullOrWhiteSpace($partitionAdministrativeUnitId)) {
+                                $partitionAdministrativeUnitId -eq $administrativeUnitId
+                            } else {
+                                ([string](Get-ObjectPropertyValue -InputObject $_ -Name 'AdministrativeUnitId')) -eq $administrativeUnitId
+                            }
+                        } |
+                        ForEach-Object {
+                            $cleanRow = [ordered]@{}
+                            foreach ($prop in $_.PSObject.Properties) {
+                                if (-not $prop.Name.StartsWith('__', [System.StringComparison]::Ordinal)) {
+                                    $cleanRow[[string]$prop.Name] = $prop.Value
+                                }
+                            }
+                            [PSCustomObject]$cleanRow
                         }
                 )
                 if ($groupRows.Count -eq 0) {
@@ -2301,15 +2847,18 @@ function Invoke-Export {
 
 Export-ModuleMember -Function @(
     'Invoke-Export',
+    'Get-ConfiguredExportNamesByPrefix',
     'Get-RoleAssignmentsExport',
+    'Get-AccountMatchesExport',
     'Get-GroupMembersExport',
     'Get-AuGroupMembersExport',
     'Get-SubscriptionsExport',
     'Get-AppRegistrationsExport',
     'Get-GraphPermissionsExport',
     'Get-LicenseExport',
-    'Get-InactiveAdminAccountsExport'
+    'Get-InactiveEntraAdminAccountsExport'
 )
+
 
 
 

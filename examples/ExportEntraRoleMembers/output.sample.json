@@ -1,0 +1,11 @@
+[
+  {
+    "Role": "Global Administrator",
+    "AssignmentType": "Active",
+    "PrincipalId": "11111111-1111-1111-1111-111111111111",
+    "PrincipalType": "User",
+    "PrincipalDisplayName": "Alex Admin",
+    "StartDateTime": "2026-01-01T00:00:00Z",
+    "EndDateTime": null
+  }
+]

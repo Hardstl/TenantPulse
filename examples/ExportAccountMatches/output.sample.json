@@ -1,0 +1,10 @@
+[
+  {
+    "UserId": "55555555-5555-5555-5555-555555555555",
+    "UserPrincipalName": "adm.finance@contoso.com",
+    "DisplayName": "Finance Administrator",
+    "Mail": "adm.finance@contoso.com",
+    "UserType": "Member",
+    "AccountEnabled": true
+  }
+]

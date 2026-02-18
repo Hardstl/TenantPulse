@@ -24,14 +24,15 @@ param maximumInstanceCount int = 100
 
 param exportContainerName string = 'exports'
 
-param entraRolesSchedule string = '0 0 0 * * 0' // Runs every Sunday at 00:00 UTC
+param entraRoleMembersSchedule string = '0 0 0 * * 0' // Runs every Sunday at 00:00 UTC
+param accountMatchSchedule string = '0 15 0 * * 0' // Runs every Sunday at 00:15 UTC
 param groupMembersSchedule string = '0 30 0 * * 0' // Runs every Sunday at 00:30 UTC
 param auGroupMembersSchedule string = '0 0 1 * * 0' // Runs every Sunday at 01:00 UTC
 param subscriptionsSchedule string = '0 0 4 * * 0' // Runs every Sunday at 04:00 UTC
 param appRegistrationsSchedule string = '0 0 2 * * 0' // Runs every Sunday at 02:00 UTC
 param graphPermissionsSchedule string = '0 30 1 * * 0' // Runs every Sunday at 01:30 UTC
 param licensesSchedule string = '0 0 3 * * 0' // Runs every Sunday at 03:00 UTC
-param inactiveAdminsSchedule string = '0 30 3 * * 0' // Runs every Sunday at 03:30 UTC
+param inactiveEntraAdminsSchedule string = '0 30 3 * * 0' // Runs every Sunday at 03:30 UTC
 
 var deploymentContainerName = 'app-package-${uniqueString(resourceGroup().id, functionAppName)}'
 var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -208,14 +209,15 @@ module appSettings 'br/public:avm/res/web/site/config:0.2.0' = {
       FUNCTIONS_EXTENSION_VERSION: '~4'
       AzureWebJobsStorage__accountName: storageAccountName
       APPLICATIONINSIGHTS_CONNECTION_STRING: appInsights.outputs.connectionString
-      EXPORT_ENTRAROLES_SCHEDULE: entraRolesSchedule
+      EXPORT_ENTRAROLEMEMBERS_SCHEDULE: entraRoleMembersSchedule
+      EXPORT_ACCOUNTMATCH_SCHEDULE: accountMatchSchedule
       EXPORT_GROUPMEMBERS_SCHEDULE: groupMembersSchedule
       EXPORT_AUGROUPMEMBERS_SCHEDULE: auGroupMembersSchedule
       EXPORT_SUBSCRIPTIONS_SCHEDULE: subscriptionsSchedule
       EXPORT_APPREGS_SCHEDULE: appRegistrationsSchedule
       EXPORT_GRAPHPERMS_SCHEDULE: graphPermissionsSchedule
       EXPORT_LICENSES_SCHEDULE: licensesSchedule
-      EXPORT_INACTIVEADMINS_SCHEDULE: inactiveAdminsSchedule
+      EXPORT_INACTIVEENTRAADMINS_SCHEDULE: inactiveEntraAdminsSchedule
     }
   }
 }
@@ -223,3 +225,4 @@ module appSettings 'br/public:avm/res/web/site/config:0.2.0' = {
 output functionAppHostname string = functionApp.outputs.defaultHostname
 output functionAppResourceId string = resourceId('Microsoft.Web/sites', functionAppName)
 output exportStorageName string = exportStorageAccountName
+

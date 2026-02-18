@@ -9,19 +9,42 @@
     }
   },
   "exports": {
-    "ENTRAROLES": {
+    "ENTRAROLEMEMBERS": {
       "enabled": true
+    },
+    "ACCOUNTMATCH_ADM": {
+      "enabled": true,
+      "properties": [
+        "UserId",
+        "DisplayName"
+      ]
+    },
+    "ACCOUNTMATCH_SVC": {
+      "enabled": true,
+      "properties": [
+        "UserId",
+        "DisplayName"
+      ]
     },
     "GROUPMEMBERS": {
       "enabled": true,
       "groupIds": [
         "11111111-1111-1111-1111-111111111111"
+      ],
+      "properties": [
+        "GroupId",
+        "UserId"
       ]
     },
     "AUGROUPMEMBERS": {
       "enabled": true,
       "administrativeUnitIds": [
         "22222222-2222-2222-2222-222222222222"
+      ],
+      "properties": [
+        "AdministrativeUnitId",
+        "GroupId",
+        "UserId"
       ]
     },
     "SUBSCRIPTIONS": {
@@ -36,8 +59,10 @@
     "LICENSES": {
       "enabled": true
     },
-    "INACTIVEADMINS": {
+    "INACTIVEENTRAADMINS": {
       "enabled": true
     }
   }
 }
+
+
