@@ -1,0 +1,20 @@
+{
+  "defaults": {
+    "formats": ["json", "csv", "html"],
+    "storage": {
+      "storageAccount": "<export-storage-account>",
+      "storageContainer": "exports"
+    }
+  },
+  "exports": {
+    "APPREGS": {
+      "enabled": true,
+      "blobPrefix": "app-registrations",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "expiryDays": 30
+    }
+  }
+}

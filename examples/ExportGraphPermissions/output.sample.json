@@ -1,0 +1,12 @@
+[
+  {
+    "EntityType": "ManagedIdentity",
+    "DisplayName": "reportingcursor",
+    "ObjectId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    "AppId": null,
+    "Permission": "Directory.Read.All",
+    "PermissionId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+    "HasWriteOrDeleteCapability": false,
+    "RiskReason": ""
+  }
+]

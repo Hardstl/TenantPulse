@@ -1,0 +1,12 @@
+[
+  {
+    "SkuId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+    "SkuPartNumber": "SPE_E5",
+    "FriendlyName": "Microsoft 365 E5",
+    "TotalUnits": 250,
+    "AssignedUnits": 247,
+    "AvailableUnits": 3,
+    "LowAvailableThreshold": 5,
+    "IsLowAvailability": true
+  }
+]

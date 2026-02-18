@@ -1,0 +1,27 @@
+{
+  "defaults": {
+    "formats": ["json", "csv", "html"],
+    "storage": {
+      "storageAccount": "<export-storage-account>",
+      "storageContainer": "exports"
+    }
+  },
+  "exports": {
+    "GROUPMEMBERS": {
+      "enabled": true,
+      "blobPrefix": "group-members",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "groupIds": [
+        "22222222-2222-2222-2222-222222222222"
+      ],
+      "additionalProperties": [
+        "mail",
+        "department"
+      ],
+      "excludeAdditionalPropertiesByGroup": {}
+    }
+  }
+}

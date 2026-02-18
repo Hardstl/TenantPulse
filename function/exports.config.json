@@ -1,0 +1,147 @@
+{
+  "defaults": {
+    "formats": [
+      "json",
+      "csv",
+      "html"
+    ],
+    "storage": {
+      "storageAccount": "<export-storage-account>",
+      "storageContainer": "exports"
+    }
+  },
+  "exports": {
+    "ENTRAROLES": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "roles",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      }
+    },
+    "GROUPMEMBERS": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "group-members",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "groupIds": [
+        "33333333-3333-3333-3333-333333333333"
+      ],
+      "additionalProperties": [
+        "mail",
+        "department",
+        "jobTitle",
+        "employeeId",
+        "extensionAttribute2"
+      ],
+      "excludeAdditionalPropertiesByGroup": {
+        "33333333-3333-3333-3333-333333333333": [
+          "department"
+        ]
+      }
+    },
+    "AUGROUPMEMBERS": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "au-group-members",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "administrativeUnitIds": [
+        "44444444-4444-4444-4444-444444444444"
+      ],
+      "additionalProperties": [
+        "mail",
+        "department"
+      ],
+      "excludeAdditionalPropertiesByGroup": {}
+    },
+    "SUBSCRIPTIONS": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "subscriptions",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      }
+    },
+    "APPREGS": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "app-registrations",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "expiryDays": 30
+    },
+    "GRAPHPERMS": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "graph-permissions",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      }
+    },
+    "LICENSES": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "licenses",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "lowAvailableThreshold": 5,
+      "friendlyNamesSourceUrl": "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv",
+      "mappingCacheHours": 24
+    },
+    "INACTIVEADMINS": {
+      "enabled": true,
+      "formats": [
+        "json",
+        "csv",
+        "html"
+      ],
+      "blobPrefix": "inactive-admins",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "days": 90
+    }
+  }
+}

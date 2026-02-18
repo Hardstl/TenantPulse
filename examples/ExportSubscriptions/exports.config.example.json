@@ -1,0 +1,19 @@
+{
+  "defaults": {
+    "formats": ["json", "csv", "html"],
+    "storage": {
+      "storageAccount": "<export-storage-account>",
+      "storageContainer": "exports"
+    }
+  },
+  "exports": {
+    "SUBSCRIPTIONS": {
+      "enabled": true,
+      "blobPrefix": "subscriptions",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "defaults": {
+    "formats": ["json", "csv", "html"],
+    "storage": {
+      "storageAccount": "<export-storage-account>",
+      "storageContainer": "exports"
+    }
+  },
+  "exports": {
+    "ENTRAROLES": {
+      "enabled": true,
+      "formats": ["json", "csv", "html"],
+      "blobPrefix": "roles",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      }
+    }
+  }
+}

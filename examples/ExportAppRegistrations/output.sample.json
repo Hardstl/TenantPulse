@@ -1,0 +1,13 @@
+[
+  {
+    "AppObjectId": "99999999-9999-9999-9999-999999999999",
+    "AppId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "DisplayName": "Contoso Payroll API",
+    "CredentialType": "Secret",
+    "CredentialId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "StartDateTime": "2026-01-01T00:00:00Z",
+    "EndDateTime": "2026-03-01T00:00:00Z",
+    "Status": "ExpiringSoon",
+    "DaysToExpiry": 13
+  }
+]

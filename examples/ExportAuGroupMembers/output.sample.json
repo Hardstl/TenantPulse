@@ -1,0 +1,13 @@
+[
+  {
+    "AdministrativeUnitId": "44444444-4444-4444-4444-444444444444",
+    "AdministrativeUnitDisplayName": "North America",
+    "GroupId": "55555555-5555-5555-5555-555555555555",
+    "GroupDisplayName": "NA Security Team",
+    "UserId": "66666666-6666-6666-6666-666666666666",
+    "UserPrincipalName": "user2@contoso.com",
+    "DisplayName": "User Two",
+    "UserType": "Guest",
+    "department": "Security"
+  }
+]

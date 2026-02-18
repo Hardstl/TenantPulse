@@ -1,0 +1,58 @@
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Azure tooling
+.azure/
+.azure-config/
+.azd/
+.azure-functions-core-tools/
+function/.azurite/
+**/.azurite/
+function/local.settings.json
+function/bin/
+function/obj/
+function/Modules/Microsoft.Graph.*/
+function/Modules/Az.*/
+
+# Node
+**/node_modules/
+**/dist/
+**/build/
+**/.npm/
+**/.cache/
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Python
+**/__pycache__/
+**/.pytest_cache/
+**/*.py[cod]
+**/.venv/
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+
+# Logs
+*.log
+**/logs/
+function.zip
+function-retest.zip
+
+# Env files
+.env
+.env.*
+
+# Ignore infra and tests
+tmp/
+tests/

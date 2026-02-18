@@ -1,0 +1,12 @@
+[
+  {
+    "GroupId": "22222222-2222-2222-2222-222222222222",
+    "GroupDisplayName": "Finance Users",
+    "UserId": "33333333-3333-3333-3333-333333333333",
+    "UserPrincipalName": "user1@contoso.com",
+    "DisplayName": "User One",
+    "UserType": "Member",
+    "mail": "user1@contoso.com",
+    "department": "Finance"
+  }
+]

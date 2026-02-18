@@ -1,0 +1,17 @@
+[
+  {
+    "UserId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "UserPrincipalName": "admin1@contoso.com",
+    "DisplayName": "Admin One",
+    "AccountEnabled": true,
+    "RoleNames": "Global Administrator;Privileged Role Administrator",
+    "AssignmentTypes": "Active;Eligible",
+    "LastSuccessfulSignInDateTime": "2025-08-01T12:30:00Z",
+    "LastInteractiveSignInDateTime": "2025-08-01T12:30:00Z",
+    "LastNonInteractiveSignInDateTime": "2025-08-10T04:10:00Z",
+    "DaysSinceSignIn": 190,
+    "InactiveThresholdDays": 90,
+    "IsInactive": true,
+    "InactivityReason": "InactiveThresholdExceeded"
+  }
+]

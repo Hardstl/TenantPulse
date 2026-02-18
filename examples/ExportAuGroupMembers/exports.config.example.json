@@ -1,0 +1,26 @@
+{
+  "defaults": {
+    "formats": ["json", "csv", "html"],
+    "storage": {
+      "storageAccount": "<export-storage-account>",
+      "storageContainer": "exports"
+    }
+  },
+  "exports": {
+    "AUGROUPMEMBERS": {
+      "enabled": true,
+      "blobPrefix": "au-group-members",
+      "storage": {
+        "storageAccount": "<export-storage-account>",
+        "storageContainer": "exports"
+      },
+      "administrativeUnitIds": [
+        "44444444-4444-4444-4444-444444444444"
+      ],
+      "additionalProperties": [
+        "department"
+      ],
+      "excludeAdditionalPropertiesByGroup": {}
+    }
+  }
+}
