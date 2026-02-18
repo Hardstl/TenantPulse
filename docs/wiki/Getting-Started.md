@@ -15,8 +15,8 @@ You need:
 ## Clone and review
 
 ```powershell
-git clone <your-repo-url>
-cd AzureReportingCenter-Cursor
+git clone https://github.com/Hardstl/TenantPulse.git
+cd TenantPulse
 ```
 
 Check the key files:
