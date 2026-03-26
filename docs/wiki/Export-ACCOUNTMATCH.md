@@ -22,8 +22,18 @@ Rule checks are case-insensitive.
   "upnContains": [],
   "displayNameContains": ["admin"],
   "properties": ["UserType", "AccountEnabled"]
+},
+"ACCOUNTMATCH_SVC": {
+  "enabled": true,
+  "blobPrefix": "account-match-svc",
+  "upnStartsWith": ["svc."],
+  "upnContains": ["-svc-"],
+  "displayNameContains": ["service account"],
+  "properties": ["UserType", "AccountEnabled", "UserPrincipalName"]
 }
 ```
+
+Both profiles are processed in the same run because `ExportAccountMatches` discovers exports by the `ACCOUNTMATCH_*` key prefix.
 
 ## Output properties
 
@@ -34,7 +44,7 @@ Rule checks are case-insensitive.
 ## Notes
 
 - Export outputs matched users only.
-- You can define multiple profiles (`ACCOUNTMATCH_ADM`, `ACCOUNTMATCH_SVC`, etc.).
+- You can define multiple profiles, like the `ACCOUNTMATCH_ADM` and `ACCOUNTMATCH_SVC` example above.
 
 ## Schedule
 

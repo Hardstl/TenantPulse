@@ -907,7 +907,7 @@ function Write-ExportFormatToStorage {
     $tempFile = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "$tempName.$Format")
     try {
         $content | Set-Content -Path $tempFile -Encoding UTF8
-        $timestamp = (Get-Date).ToString("yyyyMMdd_HHmmss")
+        $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
         $fileName = "{0}_{1}.{2}" -f $FileNameBase, $timestamp, $Format
         if ([string]::IsNullOrWhiteSpace($BlobPrefix)) {
             $blobName = $fileName
@@ -1109,14 +1109,33 @@ function Get-RoleAssignmentsExport {
         }
     }
 
+    $assignmentTypeSortRank = @{
+        Active = 0
+        Eligible = 1
+    }
+    $sortedRows = @(
+        $rows |
+            Sort-Object `
+                @{ Expression = { [string]$_.Role }; Descending = $false }, `
+                @{ Expression = {
+                    $rank = $assignmentTypeSortRank[[string]$_.AssignmentType]
+                    if ($null -eq $rank) {
+                        return 2
+                    }
+                    return $rank
+                }; Descending = $false }, `
+                @{ Expression = { [string]$_.PrincipalDisplayName }; Descending = $false }, `
+                @{ Expression = { [string]$_.PrincipalId }; Descending = $false }
+    )
+
     Write-ExportRuntimeLog -Stage 'collect' -Event 'summary' -Status 'ok' -Data @{
         roleDefinitions = @($roleDefinitions).Count
         activeAssignments = @($activeAssignments).Count
         eligibleAssignments = @($eligibleAssignments).Count
-        rows = @($rows).Count
+        rows = @($sortedRows).Count
         durationMs = (Get-ElapsedMilliseconds -StartedAtUtc $startedAtUtc)
     }
-    return $rows
+    return $sortedRows
 }
 
 function Resolve-GroupMemberExportGroupIds {

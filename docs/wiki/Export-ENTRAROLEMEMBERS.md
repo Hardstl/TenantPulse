@@ -27,6 +27,7 @@ Exports active and eligible Entra role assignments with resolved principal detai
 - Role information
 - Assignment type/scope
 - Principal identity details
+- Rows are sorted alphabetically by `Role`; within each role, `Active` appears before `Eligible`.
 
 See sample files in `examples/ExportEntraRoleMembers/`.
 

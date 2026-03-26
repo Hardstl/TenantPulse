@@ -1,13 +1,8 @@
 .DS_Store
 Thumbs.db
 
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
 # Azure tooling
+.vscode/
 .azure/
 .azure-config/
 .azd/
@@ -20,39 +15,15 @@ function/obj/
 function/Modules/Microsoft.Graph.*/
 function/Modules/Az.*/
 
-# Node
-**/node_modules/
-**/dist/
-**/build/
-**/.npm/
-**/.cache/
-
-# .NET
-**/bin/
-**/obj/
-*.user
-*.suo
-
-# Python
-**/__pycache__/
-**/.pytest_cache/
-**/*.py[cod]
-**/.venv/
-
-# Terraform
-**/.terraform/
-**/.terraform.lock.hcl
-
 # Logs
 *.log
 **/logs/
 function.zip
-function-retest.zip
 
 # Env files
 .env
 .env.*
 
-# Ignore infra and tests
+# Project specific
 tmp/
 tests/
