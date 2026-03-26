@@ -74,7 +74,7 @@ Use this when one group has stricter privacy or local policy rules.
 
 Each file is written as:
 
-`<blobPrefix>/<fileNameBase>_<yyyyMMdd_HHmmss>.<format>`
+`<blobPrefix>/<fileNameBase>_<yyyy-MM-dd_HHmmss>.<format>`
 
 ## Related pages
 
